@@ -5,8 +5,9 @@
  */
 
 import { Box, Static } from 'ink';
+import { CoreToolCallStatus } from '@google/gemini-cli-core';
 import { HistoryItemDisplay } from './HistoryItemDisplay.js';
-import { useUIState } from '../contexts/UIStateContext.js';
+import { UIStateContext, useUIState } from '../contexts/UIStateContext.js';
 import { useAppContext } from '../contexts/AppContext.js';
 import { AppHeader } from './AppHeader.js';
 
@@ -39,14 +40,23 @@ export const MainContent = () => {
   const isAlternateBuffer = config.getUseAlternateBuffer();
 
   const confirmingTool = useConfirmingTool();
-  const showConfirmationQueue = confirmingTool !== null;
+  const showConfirmationQueue = Boolean(confirmingTool);
   const confirmingToolCallId = confirmingTool?.tool.callId;
 
   const scrollableListRef = useRef<VirtualizedListRef<unknown>>(null);
 
   useEffect(() => {
-    if (showConfirmationQueue) {
-      scrollableListRef.current?.scrollToEnd();
+    if (showConfirmationQueue && scrollableListRef.current) {
+      const scrollState = scrollableListRef.current.getScrollState?.();
+      const isAtBottom = scrollState
+        ? scrollState.scrollHeight -
+            scrollState.innerHeight -
+            scrollState.scrollTop <=
+          1
+        : true;
+      if (isAtBottom) {
+        scrollableListRef.current.scrollToEnd();
+      }
     }
   }, [showConfirmationQueue, confirmingToolCallId]);
 
@@ -151,8 +161,43 @@ export const MainContent = () => {
     [historyItems, lastUserPromptIndex],
   );
 
-  const pendingItems = useMemo(
-    () => (
+  const pendingItems = useMemo(() => {
+    const hasConfirmationQueue = Boolean(
+      showConfirmationQueue && confirmingTool,
+    );
+    const visiblePendingCount = pendingHistoryItems.filter(
+      (item) =>
+        item.type !== 'tool_group' ||
+        item.tools.some(
+          (t) => t.status !== CoreToolCallStatus.AwaitingApproval,
+        ),
+    ).length;
+    const shouldPartitionHeight =
+      !isAlternateBufferOrTerminalBuffer &&
+      hasConfirmationQueue &&
+      visiblePendingCount > 0;
+    const pendingCount = Math.max(1, visiblePendingCount);
+
+    const rawPendingBudget =
+      availableTerminalHeight !== undefined
+        ? shouldPartitionHeight
+          ? Math.floor(availableTerminalHeight * 0.4)
+          : availableTerminalHeight
+        : undefined;
+
+    const perPendingItemHeight =
+      rawPendingBudget !== undefined
+        ? Math.max(Math.floor(rawPendingBudget / pendingCount), 4)
+        : undefined;
+
+    const confirmationQueueBudget =
+      availableTerminalHeight !== undefined
+        ? shouldPartitionHeight
+          ? Math.max(availableTerminalHeight - (rawPendingBudget ?? 0), 6)
+          : availableTerminalHeight
+        : undefined;
+
+    return (
       <Box flexDirection="column" key="pending-items-group">
         {pendingHistoryItems.map((item, i) => {
           const prevType =
@@ -171,7 +216,7 @@ export const MainContent = () => {
             <HistoryItemDisplay
               key={`pending-${i}`}
               availableTerminalHeight={
-                uiState.constrainHeight ? availableTerminalHeight : undefined
+                uiState.constrainHeight ? perPendingItemHeight : undefined
               }
               terminalWidth={mainAreaWidth}
               item={{ ...item, id: -(i + 1) }}
@@ -184,23 +229,29 @@ export const MainContent = () => {
           );
         })}
         {showConfirmationQueue && confirmingTool && (
-          <ToolConfirmationQueue
-            key="confirmation-queue"
-            confirmingTool={confirmingTool}
-          />
+          <UIStateContext.Provider
+            value={{
+              ...uiState,
+              availableTerminalHeight: confirmationQueueBudget,
+            }}
+          >
+            <ToolConfirmationQueue
+              key="confirmation-queue"
+              confirmingTool={confirmingTool}
+            />
+          </UIStateContext.Provider>
         )}
       </Box>
-    ),
-    [
-      pendingHistoryItems,
-      uiState.constrainHeight,
-      availableTerminalHeight,
-      mainAreaWidth,
-      showConfirmationQueue,
-      confirmingTool,
-      uiState.history,
-    ],
-  );
+    );
+  }, [
+    pendingHistoryItems,
+    isAlternateBufferOrTerminalBuffer,
+    uiState,
+    availableTerminalHeight,
+    mainAreaWidth,
+    showConfirmationQueue,
+    confirmingTool,
+  ]);
 
   const virtualizedData = useMemo(
     () => [
