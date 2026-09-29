@@ -906,6 +906,9 @@ function _doLoadSettings(workspaceDir: string): LoadedSettings {
 
   // Support environment variable override from relaunch supervisor across exit code 199
   const envAuthOverride = process.env['GEMINI_CLI_AUTH_OVERRIDE'];
+  if (envAuthOverride) {
+    delete process.env['GEMINI_CLI_AUTH_OVERRIDE'];
+  }
   const authOverride =
     envAuthOverride &&
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
@@ -921,6 +924,13 @@ function _doLoadSettings(workspaceDir: string): LoadedSettings {
       userSettings.security.auth = {};
     }
     userSettings.security.auth.selectedType = authOverride;
+    if (!userOriginalSettings.security) {
+      userOriginalSettings.security = {};
+    }
+    if (!userOriginalSettings.security.auth) {
+      userOriginalSettings.security.auth = {};
+    }
+    userOriginalSettings.security.auth.selectedType = authOverride;
   }
 
   // Support legacy theme names
