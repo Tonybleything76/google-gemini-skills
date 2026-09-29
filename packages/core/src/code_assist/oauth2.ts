@@ -692,10 +692,12 @@ export function getAvailablePort(): Promise<number> {
 
 export async function readOAuthCredsWithRetry(
   filePath: string,
-  maxRetries = 3,
+  maxRetries: number | (() => number) = 3,
 ): Promise<string> {
+  const getMax =
+    typeof maxRetries === 'function' ? maxRetries : () => maxRetries;
   let attempt = 0;
-  while (attempt < maxRetries) {
+  while (attempt < getMax()) {
     try {
       return await fs.readFile(filePath, 'utf-8');
     } catch (err: unknown) {
@@ -708,7 +710,7 @@ export async function readOAuthCredsWithRetry(
         throw err;
       }
       attempt++;
-      if (attempt >= maxRetries) {
+      if (attempt >= getMax()) {
         throw err;
       }
       await new Promise((resolve) => setTimeout(resolve, 25 * attempt));
@@ -862,7 +864,7 @@ async function cacheCredentials(credentials: Credentials) {
   const credString = JSON.stringify(finalCredentials, null, 2);
   const tempPath = path.join(
     dirPath,
-    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${tempCounter++}.tmp`,
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${tempCounter++}.${Math.random().toString(36).slice(2, 8)}.tmp`,
   );
 
   try {

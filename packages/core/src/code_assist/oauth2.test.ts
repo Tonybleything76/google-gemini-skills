@@ -1980,5 +1980,20 @@ describe('oauth2', () => {
       );
       expect(attempts).toBe(3);
     });
+
+    it('should dynamically re-evaluate getMaxRetries callback if provided', async () => {
+      const busyErr = new Error('Resource locked');
+      (busyErr as unknown as { code: string }).code = 'EPERM';
+      vi.spyOn(fs.promises, 'readFile').mockRejectedValue(busyErr);
+
+      const maxAttempts = 3;
+      const getMaxRetries = vi.fn(() => maxAttempts);
+
+      await expect(
+        readOAuthCredsWithRetry(tempFilePath, getMaxRetries),
+      ).rejects.toThrow('Resource locked');
+
+      expect(getMaxRetries.mock.calls.length).toBeGreaterThanOrEqual(3);
+    });
   });
 });

@@ -27,7 +27,7 @@ function writeAtomicSync(filePath: string, content: string): void {
   }
   const tempPath = path.join(
     dir,
-    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${tempCounter++}.tmp`,
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${tempCounter++}.${Math.random().toString(36).slice(2, 8)}.tmp`,
   );
   try {
     fs.writeFileSync(tempPath, content, 'utf-8');
